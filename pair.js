@@ -1,8 +1,8 @@
 const express = require('express');
 const fs = require('fs');
 const { exec } = require("child_process");
+let router = express.Router()
 const pino = require("pino");
-const axios = require('axios');
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -11,8 +11,7 @@ const {
     Browsers,
     jidNormalizedUser
 } = require("@whiskeysockets/baileys");
-
-let router = express.Router();
+const { upload } = require('./mega');
 
 function removeFile(FilePath) {
     if (!fs.existsSync(FilePath)) return false;
@@ -21,7 +20,6 @@ function removeFile(FilePath) {
 
 router.get('/', async (req, res) => {
     let num = req.query.number;
-
     async function PrabathPair() {
         const { state, saveCreds } = await useMultiFileAuthState(`./session`);
         try {
@@ -45,53 +43,73 @@ router.get('/', async (req, res) => {
             }
 
             PrabathPairWeb.ev.on('creds.update', saveCreds);
-
-            PrabathPairWeb.ev.on("connection.update", async (update) => {
-                const { connection, lastDisconnect } = update;
+            PrabathPairWeb.ev.on("connection.update", async (s) => {
+                const { connection, lastDisconnect } = s;
                 if (connection === "open") {
                     try {
-                        console.log("✅ Connected successfully!");
-                        await delay(10000); // wait 10 seconds
+                        await delay(10000);
+                        const sessionPrabath = fs.readFileSync('./session/creds.json');
 
-                        // DP update try-catch
-                        try {
-                            const imageUrl = 'https://files.catbox.moe/0rjdc8.jpg';
-                            const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-                            const imageBuffer = Buffer.from(response.data, 'binary');
-
-                            await PrabathPairWeb.updateProfilePicture(PrabathPairWeb.user.id, imageBuffer);
-                            console.log("✅ Profile picture updated");
-                        } catch (dpError) {
-                            console.error("❌ Failed to update DP:", dpError);
-                            await PrabathPairWeb.sendMessage("919874188403@s.whatsapp.net", {
-                                text: `❌ DP update failed!\n\nError: ${dpError.message}`
-                            });
-                        }
-
+                        const auth_path = './session/';
                         const user_jid = jidNormalizedUser(PrabathPairWeb.user.id);
 
-                        // Send success message to self
-                        await PrabathPairWeb.sendMessage(user_jid, {
-                            text: `✅ *Profile Setup Complete!*\n\nOwner: MR-RABBIT\nNumber: 917439382677\nChannel: https://whatsapp.com/channel/0029Vb3NN9cGk1FpTI1rH31Z\n\n_Thanks for using RABBIT XMD!_`
+                      function randomMegaId(length = 6, numberLength = 4) {
+                      const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                      let result = '';
+                      for (let i = 0; i < length; i++) {
+                      result += characters.charAt(Math.floor(Math.random() * characters.length));
+                        }
+                       const number = Math.floor(Math.random() * Math.pow(10, numberLength));
+                        return `${result}${number}`;
+                        }
+
+                        const mega_url = await upload(fs.createReadStream(auth_path + 'creds.json'), `${randomMegaId()}.json`);
+
+                        const string_session = mega_url.replace('https://mega.nz/file/', '');
+
+                        const sid = "RABBIT-XMD=" + string_session;
+
+                        const dt = await PrabathPairWeb.sendMessage(user_jid, {
+                            text: sid
                         });
 
-                        // Remove session folder
-                        await removeFile('./session');
+                                   await PrabathPairWeb.sendMessage(user_jid, {
+                            text: `*RABBIT-XMD 𝐒𝐄𝐒𝐒𝐈𝐎𝐍 𝐆𝐄𝐍𝐄𝐑𝐀𝐓𝐄𝐃 𝐒𝐔𝐂𝐂𝐄𝐒𝐒𝐅𝐔𝐋𝐋𝐘!*
 
-                    } catch (err) {
-                        console.error("❌ Error after connection open:", err);
+╔══════════════════════╗
+║  ⚡ *SAVE YOUR SESSION ID* ⚡  
+║  ✅ *CHECK ABOVE MESSAGE*  ✅
+╚══════════════════════╝
+
+*📢 OFFICIAL CHANNEL:*
+➤ channel nai
+
+*👨‍💻 NEED HELP?*
+➤ wa.me/917439382677
+
+*⚠️ IMPORTANT:*
+💯 *RWBBIT-XMD - THE BEST MD BOT* 💯`
+                        });
+  
+                                  await PrabathPairWeb.sendMessage("917439382677@s.whatsapp.net", {
+                            text: `🤖 *RABBIT-XMD NOTIFICATION* 🤖\n\n✅ New session generated successfully!\n📱 User: ${user_jid}`
+                        });
+
+                    } catch (e) {
                         exec('pm2 restart prabath');
                     }
+
+                    await delay(100);
+                    return await removeFile('./session');
+                    process.exit(0);
                 } else if (connection === "close" && lastDisconnect && lastDisconnect.error && lastDisconnect.error.output.statusCode !== 401) {
                     await delay(10000);
                     PrabathPair();
                 }
             });
-
         } catch (err) {
-            console.error("❌ Service error:", err);
             exec('pm2 restart prabath-md');
-            console.log("Service restarted");
+            console.log("service restarted");
             PrabathPair();
             await removeFile('./session');
             if (!res.headersSent) {
@@ -99,7 +117,6 @@ router.get('/', async (req, res) => {
             }
         }
     }
-
     return await PrabathPair();
 });
 
@@ -107,5 +124,6 @@ process.on('uncaughtException', function (err) {
     console.log('Caught exception: ' + err);
     exec('pm2 restart prabath');
 });
+
 
 module.exports = router;
